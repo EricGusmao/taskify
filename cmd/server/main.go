@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v5"
+	"github.com/labstack/echo/v5/middleware"
 	"go.uber.org/zap"
 	"go.uber.org/zap/exp/zapslog"
 )
@@ -37,6 +38,21 @@ func run(ctx context.Context, getenv func(string) string) error {
 	e := echo.NewWithConfig(echo.Config{
 		Logger: slog.With("component", "server"),
 	})
+
+	e.Use(
+		middleware.Recover(),
+		middleware.RequestLogger(),
+		middleware.SecureWithConfig(
+			middleware.SecureConfig{
+				Skipper:               middleware.DefaultSkipper,
+				XSSProtection:         "0",
+				ContentSecurityPolicy: "default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; sandbox;",
+				ContentTypeNosniff:    "nosniff",
+				XFrameOptions:         "DENY",
+				ReferrerPolicy:        "no-referrer",
+			},
+		),
+	)
 
 	sc := echo.StartConfig{
 		Address:         ":" + getenv("PORT"),

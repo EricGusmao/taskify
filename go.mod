@@ -8,4 +8,7 @@ require (
 	go.uber.org/zap/exp v0.3.0
 )
 
-require go.uber.org/multierr v1.10.0 // indirect
+require (
+	go.uber.org/multierr v1.10.0 // indirect
+	golang.org/x/time v0.14.0 // indirect
+)
