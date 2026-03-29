@@ -17,6 +17,55 @@ You have full freedom to structure the project however you prefer.
 
 ---
 
+## Engineering Standards
+
+### Code Style
+- Follow [Effective Go](https://go.dev/doc/effective_go) and the [Google Go Style Guide](https://google.github.io/styleguide/go/).
+
+### Project Structure — Vertical Slices
+Organize code by feature/domain slice, not by technical layer. Each slice owns its handler, service, repository, and model:
+
+```
+internal/
+  auth/
+    handler.go
+    service.go
+    repository.go
+    model.go
+  teams/
+    handler.go
+    service.go
+    repository.go
+    model.go
+  tasks/
+    handler.go
+    service.go
+    repository.go
+    model.go
+  users/
+    handler.go
+    service.go
+    repository.go
+    model.go
+```
+
+Shared infrastructure (DB, logger, JWT middleware) lives in `internal/infra/` or `internal/middleware/`.
+
+### Database Migrations
+Use **GORM CLI** (`go run gorm.io/gorm/cmd/gorm`) for migrations. Do NOT use GORM Gen.
+
+### Password Hashing
+Use **bcrypt** with a cost factor of **12**.
+
+### Payload Validation
+Use **`github.com/go-playground/validator/v10`** for all request payload validation. Bind and validate in the handler before passing to the service layer.
+
+### Testing
+- Follow the **`/tdd-workflow`** skill: write tests first (RED → GREEN → REFACTOR).
+- Use **Testcontainers** (`github.com/testcontainers/testcontainers-go`) to spin up real MySQL containers in integration tests — no mocks for the database layer.
+
+---
+
 ## Domain
 
 The API manages teams and their members, who can create and complete tasks. Each completed task earns points for the member.
@@ -74,9 +123,11 @@ All other endpoints require the JWT in the `Authorization: Bearer <token>` heade
 ## Non-Functional Requirements
 
 - **Structured logs** — at minimum on errors and write operations.
-- **Environment variables** for database DSN, port, and JWT secret (`.env` + Viper or plain `os.Getenv`).
+- **Environment variables** for database DSN, port, and JWT secret (`.env` + godotenv or plain `os.Getenv`).
 - **Consistent HTTP error handling** — don't return `200` on failure, and don't leak error details in the body in production.
 - Include a `docker-compose.yml` that spins up MySQL to ease evaluation.
+- Pagination
+- Open API 3.1 spec, using redocly
 
 ---
 
@@ -84,12 +135,10 @@ All other endpoints require the JWT in the `Authorization: Bearer <token>` heade
 
 - Frontend
 - Deploy or CI/CD
-- Pagination *(welcome, but optional)*
-- Swagger *(welcome, but optional)*
 
 ---
 
-## ⭐ Bonus — File Upload with Abstracted Storage
+## File Upload with Abstracted Storage
 
 Add the ability to upload a profile picture to a user's profile.
 
@@ -111,14 +160,11 @@ type StorageProvider interface {
 }
 ```
 
-Implement two versions of this interface:
+Implement one version of this interface:
 
 - **`LocalStorage`** — saves the file to local disk (for running without cloud)
-- **`GCSStorage`** *(optional)* — saves to Google Cloud Storage using `cloud.google.com/go/storage`
 
-Choose which implementation to use via environment variable (`STORAGE_BACKEND=local` or `gcs`).
-
-**Validate:** only images (`.jpg`, `.png`, `.webp`), max 5 MB.
+**Validate:** only images (`.jpg`, `.png`, `.webp`), max 5 MB, and use http.DetectContentType for security.
 
 Write at least one test using the `LocalStorage` implementation or a mock of the interface.
 
@@ -132,9 +178,6 @@ Write at least one test using the `LocalStorage` implementation or a mock of the
 ---
 
 ## Delivery
-
-Submit a link to a public repository (GitHub/GitLab) or a `.zip` containing:
-
 - Source code
 - Functional `docker-compose.yml`
 - `README.md` with instructions to run locally
