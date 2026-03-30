@@ -9,7 +9,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/EricGusmao/taskify/api"
 	"github.com/EricGusmao/taskify/internal/auth"
+	"github.com/EricGusmao/taskify/internal/docs"
 	"github.com/EricGusmao/taskify/internal/infra"
 	"github.com/EricGusmao/taskify/internal/middleware"
 	"github.com/EricGusmao/taskify/internal/tasks"
@@ -62,7 +64,10 @@ func run(ctx context.Context, getenv func(string) string) error {
 		echomw.RequestLogger(),
 		echomw.SecureWithConfig(
 			echomw.SecureConfig{
-				Skipper:               echomw.DefaultSkipper,
+				Skipper: func(c *echo.Context) bool {
+					p := c.Request().URL.Path
+					return p == "/docs" || p == "/api/openapi.yaml"
+				},
 				XSSProtection:         "0",
 				ContentSecurityPolicy: "default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; sandbox;",
 				ContentTypeNosniff:    "nosniff",
@@ -71,6 +76,10 @@ func run(ctx context.Context, getenv func(string) string) error {
 			},
 		),
 	)
+
+	docsHandler := docs.NewHandler(api.Spec)
+	e.GET("/api/openapi.yaml", docsHandler.ServeSpec)
+	e.GET("/docs", docsHandler.ServeRedoc)
 
 	authRepo := auth.NewUserRepository(db)
 	authSvc := auth.NewService(authRepo, logger, []byte(jwtSecret))
