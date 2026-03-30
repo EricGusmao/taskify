@@ -53,6 +53,12 @@ A imagem de produção usa `gcr.io/distroless/static-debian13:nonroot` como base
 ## O Que Faria Diferente com Mais Tempo
 
 
+### Atomicidade no Upload de Avatar
+
+`UploadAvatar` executa `storage.Upload` e `repo.UpdateAvatarURL` como operações independentes. Se `UpdateAvatarURL` falhar após o upload, o arquivo fica órfão no storage. O inverso também é possível: `replaceAvatar` deleta o arquivo antigo antes de fazer o novo upload — se o upload falhar, o usuário perde o avatar sem ganhar outro.
+
+Com mais tempo, o upload seria feito para um caminho temporário, a atualização do banco aconteceria numa transação, e só então o arquivo seria movido para o caminho definitivo. Arquivos temporários sem confirmação seriam coletados por um job periódico de GC.
+
 ### Erros de Validação como Array Descritivo
 
 A implementação atual retorna o primeiro erro de validação encontrado como uma string simples (ex: `"field 'email' is required"`). Com mais tempo, o handler mapearia os erros do `go-playground/validator` para um array estruturado:
