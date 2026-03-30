@@ -9,6 +9,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/EricGusmao/taskify/internal/auth"
+	"github.com/EricGusmao/taskify/internal/infra"
+	"github.com/EricGusmao/taskify/internal/validate"
 	"github.com/labstack/echo/v5"
 	"github.com/labstack/echo/v5/middleware"
 	"go.uber.org/zap"
@@ -35,8 +38,14 @@ func run(ctx context.Context, getenv func(string) string) error {
 
 	slog.SetDefault(slog.New(zapslog.NewHandler(logger.Core())))
 
+	db, err := infra.NewDB(getenv("DATABASE_DSN"))
+	if err != nil {
+		return fmt.Errorf("failed to connect to database: %w", err)
+	}
+
 	e := echo.NewWithConfig(echo.Config{
-		Logger: slog.With("component", "server"),
+		Logger:    slog.With("component", "server"),
+		Validator: echoValidator{},
 	})
 
 	e.Use(
@@ -54,15 +63,26 @@ func run(ctx context.Context, getenv func(string) string) error {
 		),
 	)
 
+	authRepo := auth.NewUserRepository(db)
+	authSvc := auth.NewService(authRepo, logger)
+	authHandler := auth.NewHandler(authSvc)
+	auth.RegisterRoutes(e.Group("/auth"), authHandler)
+
 	sc := echo.StartConfig{
 		Address:         ":" + getenv("PORT"),
 		GracefulTimeout: 30 * time.Second,
 	}
 
-	err = sc.Start(ctx, e)
-	if err != nil {
+	if err := sc.Start(ctx, e); err != nil {
 		return fmt.Errorf("failed to start server: %v", err)
 	}
 
 	return nil
+}
+
+// echoValidator implements echo.Validator using the shared validate package.
+type echoValidator struct{}
+
+func (echoValidator) Validate(i any) error {
+	return validate.Struct(i)
 }

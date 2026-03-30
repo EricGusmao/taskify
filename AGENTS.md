@@ -13,18 +13,33 @@ Build a mini REST API for team-based task management from scratch. The goal isn'
 | JWT | github.com/golang-jwt/jwt/v5 |
 | Logger | go.uber.org/zap |
 
-You have full freedom to structure the project however you prefer.
-
 ---
 
 ## Engineering Standards
 
-### Code Style
-- Follow [Effective Go](https://go.dev/doc/effective_go) and the [Google Go Style Guide](https://google.github.io/styleguide/go/).
+## Go Code Conventions
+
+Mandatory standards: [Google Go Style Guide](https://google.github.io/styleguide/go/) + [Effective Go](https://go.dev/doc/effective_go).
+
+- **Package names:** lowercase single word, no underscores (`versioning`, not `document_versioning`)
+- **No export stutter:** `verify.Result` ✓ — `verify.VerificationResult` ✗; `sharing.Token` ✓ — `sharing.SharingToken` ✗
+- **Errors as values, defined in the owning slice:**
+  `upload.ErrUnsupportedFormat`, `verify.ErrDivergent`, `verify.ErrAlgorithmUnsupported`,
+  `sharing.ErrTokenExpired`, `sharing.ErrTokenRevoked`,
+  `platform/session.ErrNotFound`, `platform/session.ErrInvalidSignature`
+- **Error wrapping:** `fmt.Errorf("upload.service.Store: %w", err)` — always inspectable via `errors.Is`/`errors.As`
+- **Interfaces at point of use, small and focused:**
+  `verify.Verifier`, `platform/audit.Writer`, `platform/session.Store`, `sharing.TokenStore`
+- **Constructor functions for DI:** `upload.NewService(querier, auditor)` — no package-level vars, no `init()`
+- **`context.Context` as first param** in all service methods and repository functions; never stored in structs
+- **Functional options** for optional config: `WithAlgorithm(a Algorithm)`
+- **Godoc on every exported identifier** starting with the identifier name
+- **`io.TeeReader`** for streaming hash computation — never buffer entire file in memory
 
 ### Project Structure — Vertical Slices
-Organize code by feature/domain slice, not by technical layer. Each slice owns its handler, service, repository, and model:
+Code is organized by **feature (use case)**, not by technical layer. Each slice owns its handler, service logic, and types end-to-end. Cross-cutting infrastructure lives in `platform/`.
 
+The rule: **if you're working on a feature, you should rarely need to leave its slice directory.**
 ```
 internal/
   auth/
@@ -51,6 +66,25 @@ internal/
 
 Shared infrastructure (DB, logger, JWT middleware) lives in `internal/infra/` or `internal/middleware/`.
 
+### Slice anatomy
+
+Each feature slice follows the same internal shape:
+
+```
+upload/
+  handler.go    # chi handler(s); reads request, calls service, renders templ
+  service.go    # business logic; depends on store/db.Querier + platform/audit
+  types.go      # request/response types and domain errors for this slice
+                # e.g. upload.ErrUnsupportedFormat
+```
+
+Slices **do not import each other**. Shared types (e.g. a document ID passed between slices) come from `store/db` models or a minimal shared `types.go` at `internal/types.go` if truly needed.
+
+### Platform packages
+
+`platform/` packages are the only ones imported by multiple slices:
+
+
 ### Database Migrations
 Use **GORM CLI** (`go run gorm.io/gorm/cmd/gorm`) for migrations. Do NOT use GORM Gen.
 
@@ -62,7 +96,142 @@ Use **`github.com/go-playground/validator/v10`** for all request payload validat
 
 ### Testing
 - Follow the **`/tdd-workflow`** skill: write tests first (RED → GREEN → REFACTOR).
-- Use **Testcontainers** (`github.com/testcontainers/testcontainers-go`) to spin up real MySQL containers in integration tests — no mocks for the database layer.
+
+#### Testing Philosophy
+
+**Integration tests via testcontainers-go are the primary form of testing.** Each test package spins up a real MySQL container via `testhelper.NewMySQLContainer(t)`, runs all GORM auto-migrations, and exercises real behavior end-to-end. Each test runs inside a GORM transaction rolled back in `t.Cleanup` — no manual truncation.
+
+Unit tests are reserved for pure logic with zero I/O: hash computation, JWT signing, constant-time comparisons, TTL math. **No DB mocks.**
+
+**No testify.** All assertions use the standard `testing` package: `t.Fatal`, `t.Fatalf`, `t.Errorf`. No `require`, no `assert`.
+```bash
+go test -race -count=1 ./...   # -count=1 disables caching so containers always run fresh
+```
+
+### Pattern 1 — TestTx with t.Cleanup
+
+`testhelper.TestTx` begins a GORM transaction and registers its rollback via `t.Cleanup`. No explicit `defer` in tests. Container is a singleton per test binary run (`sync.Once`).
+```go
+// internal/testhelper/testhelper.go
+
+// NewMySQLContainer returns a *gorm.DB backed by a MySQL testcontainer.
+// The container starts once per binary run; subsequent calls return the same instance.
+func NewMySQLContainer(t testing.TB) *gorm.DB
+
+// TestTx begins a *gorm.DB transaction and registers its rollback via t.Cleanup.
+// Each test that calls TestTx gets a fully isolated transaction.
+func TestTx(t testing.TB, db *gorm.DB) *gorm.DB
+```
+
+Implementation sketch:
+```go
+func TestTx(t testing.TB, db *gorm.DB) *gorm.DB {
+    t.Helper()
+    tx := db.Begin()
+    if tx.Error != nil {
+        t.Fatalf("testhelper: begin tx: %v", tx.Error)
+    }
+    t.Cleanup(func() {
+        if err := tx.Rollback().Error; err != nil && !errors.Is(err, sql.ErrTxDone) {
+            t.Errorf("testhelper: rollback tx: %v", err)
+        }
+    })
+    return tx
+}
+```
+
+### Pattern 2 — Parallel test bundle
+
+Each `Test*` function defines a local `testBundle` struct and a `setup` closure. Every subtest calls `setup(t)` + `t.Parallel()`, getting its own isolated transaction.
+```go
+func TestTaskService(t *testing.T) {
+    type testBundle struct {
+        svc *Service
+        tx  *gorm.DB
+    }
+
+    setup := func(t *testing.T) (*testBundle, context.Context) {
+        t.Helper()
+        ctx := context.Background()
+        db := testhelper.NewMySQLContainer(t)
+        tx := testhelper.TestTx(t, db)
+        return &testBundle{
+            svc: NewService(tx),
+            tx:  tx,
+        }, ctx
+    }
+
+    t.Run("completes task and updates score", func(t *testing.T) {
+        t.Parallel()
+        bundle, ctx := setup(t)
+        // ... assertions using t.Fatal / t.Errorf only
+    })
+
+    t.Run("rejects duplicate completion", func(t *testing.T) {
+        t.Parallel()
+        bundle, ctx := setup(t)
+        // ...
+    })
+}
+```
+
+Rules:
+- Bundle fields are the service under test + its direct fixtures (no globals).
+- `setup` always calls `t.Helper()` first.
+- Subtests always call `t.Parallel()` immediately after receiving the bundle.
+
+### Pattern 3 — Data fixtures (dbfactory)
+
+`internal/testhelper/dbfactory` contains factory functions that insert real rows with sensible defaults using GORM. They call `t.Fatal` directly — no error return.
+```go
+// internal/testhelper/dbfactory/factory.go
+
+type UserOpts struct {
+    Email        string // generated if empty: "user-000001@example.com"
+    PasswordHash string // generated if empty: bcrypt of "password"
+    Score        int
+}
+
+func User(ctx context.Context, t *testing.T, tx *gorm.DB, opts *UserOpts) *model.User {
+    t.Helper()
+    if opts == nil {
+        opts = &UserOpts{}
+    }
+    email := opts.Email
+    if email == "" {
+        email = fmt.Sprintf("user-%s@example.com", seqStr())
+    }
+    hash := opts.PasswordHash
+    if hash == "" {
+        b, err := bcrypt.GenerateFromPassword([]byte("password"), bcrypt.MinCost)
+        if err != nil {
+            t.Fatalf("dbfactory.User: hash password: %v", err)
+        }
+        hash = string(b)
+    }
+    u := &model.User{Email: email, PasswordHash: hash, Score: opts.Score}
+    if err := tx.WithContext(ctx).Create(u).Error; err != nil {
+        t.Fatalf("dbfactory.User: %v", err)
+    }
+    return u
+}
+```
+
+The atomic sequence counter ensures uniqueness across parallel tests:
+```go
+var seq atomic.Int64
+
+func seqStr() string { return fmt.Sprintf("%06d", seq.Add(1)) }
+```
+
+Factories are grouped in `var` blocks at test sites — override only what matters:
+```go
+var (
+    owner = dbfactory.User(ctx, t, tx, nil)
+    team  = dbfactory.Team(ctx, t, tx, nil)
+    task  = dbfactory.Task(ctx, t, tx, &dbfactory.TaskOpts{TeamID: team.ID})
+)
+```
 
 ---
 
