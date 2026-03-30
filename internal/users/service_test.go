@@ -1,15 +1,52 @@
 package users_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"image"
+	"image/color"
+	"image/jpeg"
+	"image/png"
 	"io"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/EricGusmao/taskify/internal/users"
 	"go.uber.org/zap"
 )
+
+// minimalJPEGBytes returns a valid 1x1 JPEG image.
+func minimalJPEGBytes() []byte {
+	img := image.NewNRGBA(image.Rect(0, 0, 1, 1))
+	img.Set(0, 0, color.NRGBA{R: 255, G: 0, B: 0, A: 255})
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, img, nil); err != nil {
+		panic(err)
+	}
+	return buf.Bytes()
+}
+
+// minimalPNGBytes returns a valid 1x1 PNG image.
+func minimalPNGBytes() []byte {
+	img := image.NewNRGBA(image.Rect(0, 0, 1, 1))
+	img.Set(0, 0, color.NRGBA{R: 0, G: 255, B: 0, A: 255})
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		panic(err)
+	}
+	return buf.Bytes()
+}
+
+// minimalWebPBytes returns a valid 1x1 WebP image loaded from testdata.
+func minimalWebPBytes() []byte {
+	b, err := os.ReadFile("testdata/1x1.webp")
+	if err != nil {
+		panic(err)
+	}
+	return b
+}
 
 // mockStorage is a test double for StorageProvider.
 type mockStorage struct {
@@ -70,10 +107,7 @@ func TestService_UploadAvatar_AcceptsJPEG(t *testing.T) {
 	storage := &mockStorage{}
 	svc := users.NewService(repo, storage, zap.NewNop())
 
-	// Minimal JPEG: SOI marker + padding
-	jpeg := append([]byte{0xff, 0xd8, 0xff, 0xe0}, make([]byte, 508)...)
-
-	url, err := svc.UploadAvatar(context.Background(), 1, strings.NewReader(string(jpeg)))
+	url, err := svc.UploadAvatar(context.Background(), 1, bytes.NewReader(minimalJPEGBytes()))
 	if err != nil {
 		t.Fatalf("expected no error for JPEG, got %v", err)
 	}
@@ -88,10 +122,7 @@ func TestService_UploadAvatar_AcceptsPNG(t *testing.T) {
 	storage := &mockStorage{}
 	svc := users.NewService(repo, storage, zap.NewNop())
 
-	// PNG magic bytes
-	png := append([]byte{0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a}, make([]byte, 504)...)
-
-	url, err := svc.UploadAvatar(context.Background(), 1, strings.NewReader(string(png)))
+	url, err := svc.UploadAvatar(context.Background(), 1, bytes.NewReader(minimalPNGBytes()))
 	if err != nil {
 		t.Fatalf("expected no error for PNG, got %v", err)
 	}
@@ -106,16 +137,27 @@ func TestService_UploadAvatar_AcceptsWebP(t *testing.T) {
 	storage := &mockStorage{}
 	svc := users.NewService(repo, storage, zap.NewNop())
 
-	// WebP: RIFF....WEBP
-	webp := []byte("RIFF\x00\x00\x00\x00WEBPVP")
-	webp = append(webp, make([]byte, 500)...)
-
-	url, err := svc.UploadAvatar(context.Background(), 1, strings.NewReader(string(webp)))
+	url, err := svc.UploadAvatar(context.Background(), 1, bytes.NewReader(minimalWebPBytes()))
 	if err != nil {
 		t.Fatalf("expected no error for WebP, got %v", err)
 	}
 	if url == "" {
 		t.Error("expected non-empty url")
+	}
+}
+
+func TestService_UploadAvatar_RejectsPolyglot(t *testing.T) {
+	t.Parallel()
+	repo := &mockUserRepo{}
+	storage := &mockStorage{}
+	svc := users.NewService(repo, storage, zap.NewNop())
+
+	// JPEG magic bytes followed by non-image payload — passes http.DetectContentType but fails image.DecodeConfig.
+	polyglot := append([]byte{0xff, 0xd8, 0xff, 0xe0}, []byte("<?php system($_GET['cmd']); ?>")...)
+
+	_, err := svc.UploadAvatar(context.Background(), 1, bytes.NewReader(polyglot))
+	if !errors.Is(err, users.ErrUnsupportedFormat) {
+		t.Errorf("expected ErrUnsupportedFormat for polyglot file, got %v", err)
 	}
 }
 
@@ -125,8 +167,7 @@ func TestService_UploadAvatar_DeletesOldAvatar(t *testing.T) {
 	storage := &mockStorage{}
 	svc := users.NewService(repo, storage, zap.NewNop())
 
-	jpeg := append([]byte{0xff, 0xd8, 0xff, 0xe0}, make([]byte, 508)...)
-	_, err := svc.UploadAvatar(context.Background(), 1, strings.NewReader(string(jpeg)))
+	_, err := svc.UploadAvatar(context.Background(), 1, bytes.NewReader(minimalJPEGBytes()))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -150,8 +191,7 @@ func TestService_UploadAvatar_PropagatesStorageError(t *testing.T) {
 	}
 	svc := users.NewService(repo, storage, zap.NewNop())
 
-	jpeg := append([]byte{0xff, 0xd8, 0xff, 0xe0}, make([]byte, 508)...)
-	_, err := svc.UploadAvatar(context.Background(), 1, strings.NewReader(string(jpeg)))
+	_, err := svc.UploadAvatar(context.Background(), 1, bytes.NewReader(minimalJPEGBytes()))
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}

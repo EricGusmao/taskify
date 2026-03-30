@@ -28,7 +28,13 @@ O projeto usa `gorm.G[T]` (API genérica type-safe) para operações simples e `
 
 O upload de avatar está desacoplado do handler via interface `StorageProvider`. A implementação atual (`LocalStorage`) salva em disco. A interface permite trocar por S3, GCS ou qualquer outro provider sem mudar o handler ou o service — apenas injetar uma implementação diferente no construtor.
 
-A detecção de tipo de arquivo usa `http.DetectContentType` nos primeiros 512 bytes (não a extensão do arquivo), o que previne que usuários renomeiem arquivos para burlar a validação.
+A validação de tipo de arquivo usa `image.DecodeConfig` do pacote padrão `image` (com suporte a WebP via `golang.org/x/image/webp`), não `http.DetectContentType`. `http.DetectContentType` opera apenas nos primeiros 512 bytes (magic bytes), o que pode ser burlado por arquivos poliglota — por exemplo, um arquivo PHP com cabeçalho JPEG válido passaria a verificação de tipo mas conteria payload malicioso. `image.DecodeConfig` faz parse estrutural do header da imagem e rejeita arquivos que não são imagens válidas.
+
+Além da detecção de formato, o service aplica duas camadas adicionais de proteção:
+
+1. **Proteção contra decompression bomb:** antes de chamar `image.Decode`, as dimensões retornadas por `image.DecodeConfig` são verificadas contra um limite de 16 MP (`4096×4096`). Isso evita que um arquivo malicioso declare dimensões gigantescas e esgote a memória do servidor ao ser decodificado.
+
+2. **Re-encoding para remoção de metadata:** após decodificar a imagem em memória, ela é re-codificada com `jpeg.Encode` ou `png.Encode`. Isso descarta todo o conteúdo original do arquivo — EXIF, perfis ICC, chunks de comentário e qualquer payload embutido — e armazena apenas os pixels limpos. WebP é re-codificado como JPEG (não existe encoder WebP em Go).
 
 ### Tratamento de Erros com Sentinel Values
 

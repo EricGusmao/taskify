@@ -5,6 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"image"
+	"image/color"
+	"image/jpeg"
+	"image/png"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -85,14 +89,26 @@ func doUpload(t *testing.T, b *handlerBundle, req *http.Request, userID uint) *h
 	return rec
 }
 
-// minimalJPEG returns bytes that http.DetectContentType identifies as image/jpeg.
+// minimalJPEG returns a valid 1x1 JPEG image.
 func minimalJPEG() []byte {
-	return append([]byte{0xff, 0xd8, 0xff, 0xe0}, make([]byte, 508)...)
+	img := image.NewNRGBA(image.Rect(0, 0, 1, 1))
+	img.Set(0, 0, color.NRGBA{R: 255, G: 0, B: 0, A: 255})
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, img, nil); err != nil {
+		panic(err)
+	}
+	return buf.Bytes()
 }
 
-// minimalPNG returns bytes that http.DetectContentType identifies as image/png.
+// minimalPNG returns a valid 1x1 PNG image.
 func minimalPNG() []byte {
-	return append([]byte{0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a}, make([]byte, 504)...)
+	img := image.NewNRGBA(image.Rect(0, 0, 1, 1))
+	img.Set(0, 0, color.NRGBA{R: 0, G: 255, B: 0, A: 255})
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		panic(err)
+	}
+	return buf.Bytes()
 }
 
 func TestHandler_UploadAvatar_ValidJPEG(t *testing.T) {
@@ -142,6 +158,22 @@ func TestHandler_UploadAvatar_UnsupportedFormat(t *testing.T) {
 
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Errorf("expected 422, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandler_UploadAvatar_RejectsPolyglot(t *testing.T) {
+	t.Parallel()
+	b, ctx := setupHandler(t)
+
+	user := dbfactory.User(ctx, t, b.tx, nil)
+	// JPEG magic bytes followed by non-image payload.
+	polyglot := append([]byte{0xff, 0xd8, 0xff, 0xe0}, []byte("<?php system($_GET['cmd']); ?>")...)
+	req := buildMultipartRequest(t, polyglot, "shell.jpg")
+
+	rec := doUpload(t, b, req, user.ID)
+
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Errorf("expected 422 for polyglot file, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
 

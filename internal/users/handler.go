@@ -46,11 +46,13 @@ func (h *Handler) UploadAvatar(c *echo.Context) error {
 	}
 	defer src.Close()
 
-	url, err := h.svc.UploadAvatar(c.Request().Context(), uint(uid), src)
+	url, err := h.svc.UploadAvatar(c.Request().Context(), uint(uid), src) // multipart.File implements io.ReadSeeker
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrUnsupportedFormat):
 			return echo.NewHTTPError(http.StatusUnprocessableEntity, "unsupported file format: only jpeg, png, and webp are allowed")
+		case errors.Is(err, ErrImageTooLarge):
+			return echo.NewHTTPError(http.StatusUnprocessableEntity, "image dimensions exceed the 4096x4096 limit")
 		case errors.Is(err, ErrUserNotFound):
 			return echo.NewHTTPError(http.StatusNotFound, "user not found")
 		}
