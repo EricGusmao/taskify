@@ -107,7 +107,7 @@ func TestService_UploadAvatar_AcceptsWebP(t *testing.T) {
 	svc := users.NewService(repo, storage, zap.NewNop())
 
 	// WebP: RIFF....WEBP
-	webp := []byte("RIFF\x00\x00\x00\x00WEBP")
+	webp := []byte("RIFF\x00\x00\x00\x00WEBPVP")
 	webp = append(webp, make([]byte, 500)...)
 
 	url, err := svc.UploadAvatar(context.Background(), 1, strings.NewReader(string(webp)))

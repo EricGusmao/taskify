@@ -42,7 +42,7 @@ func (s *Service) UploadAvatar(ctx context.Context, userID uint, content io.Read
 	}
 	buf = buf[:n]
 
-	ct := detectContentType(buf)
+	ct := http.DetectContentType(buf)
 	ext, ok := allowedContentTypes[ct]
 	if !ok {
 		return "", fmt.Errorf("users.service.UploadAvatar: %w", ErrUnsupportedFormat)
@@ -76,16 +76,3 @@ func (s *Service) UploadAvatar(ctx context.Context, userID uint, content io.Read
 	s.logger.Debug("avatar uploaded", zap.Uint("user_id", userID), zap.String("url", url))
 	return url, nil
 }
-
-// detectContentType checks for WebP (which stdlib doesn't detect) before
-// falling back to http.DetectContentType.
-func detectContentType(buf []byte) string {
-	// WebP: bytes 0-3 = "RIFF", bytes 8-11 = "WEBP"
-	if len(buf) >= 12 &&
-		string(buf[0:4]) == "RIFF" &&
-		string(buf[8:12]) == "WEBP" {
-		return "image/webp"
-	}
-	return http.DetectContentType(buf)
-}
-
