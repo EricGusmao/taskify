@@ -38,6 +38,11 @@ func run(ctx context.Context, getenv func(string) string) error {
 
 	slog.SetDefault(slog.New(zapslog.NewHandler(logger.Core())))
 
+	jwtSecret := getenv("JWT_SECRET")
+	if len(jwtSecret) < 64 {
+		return fmt.Errorf("JWT_SECRET must be at least 64 characters")
+	}
+
 	db, err := infra.NewDB(getenv("DATABASE_DSN"))
 	if err != nil {
 		return fmt.Errorf("failed to connect to database: %w", err)
@@ -64,7 +69,7 @@ func run(ctx context.Context, getenv func(string) string) error {
 	)
 
 	authRepo := auth.NewUserRepository(db)
-	authSvc := auth.NewService(authRepo, logger)
+	authSvc := auth.NewService(authRepo, logger, []byte(jwtSecret))
 	authHandler := auth.NewHandler(authSvc)
 	auth.RegisterRoutes(e.Group("/auth"), authHandler)
 

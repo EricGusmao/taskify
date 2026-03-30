@@ -24,7 +24,7 @@ func TestService_Register(t *testing.T) {
 		db := testhelper.NewMySQLContainer(t)
 		tx := testhelper.TestTx(t, db)
 		return &testBundle{
-			svc: auth.NewService(auth.NewUserRepository(tx), zap.NewNop()),
+			svc: auth.NewService(auth.NewUserRepository(tx), zap.NewNop(), []byte("test-jwt-secret-that-is-at-least-64-characters-long-for-testing!")),
 			tx:  tx,
 		}, context.Background()
 	}

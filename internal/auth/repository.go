@@ -29,3 +29,16 @@ func (r *gormUserRepository) Create(ctx context.Context, user *User) error {
 	}
 	return nil
 }
+
+// FindByEmail looks up a user by email address.
+// Returns ErrInvalidCredentials if no user with that email exists.
+func (r *gormUserRepository) FindByEmail(ctx context.Context, email string) (*User, error) {
+	u, err := gorm.G[User](r.db).Where("email = ?", email).First(ctx)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrInvalidCredentials
+		}
+		return nil, fmt.Errorf("auth.repository.FindByEmail: %w", err)
+	}
+	return &u, nil
+}

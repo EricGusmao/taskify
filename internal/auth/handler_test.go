@@ -17,6 +17,9 @@ import (
 	"gorm.io/gorm"
 )
 
+// handlerTestSecret is the JWT secret shared by handler-level tests.
+var handlerTestSecret = []byte("test-jwt-secret-that-is-at-least-64-characters-long-for-testing!")
+
 type echoValidator struct{}
 
 func (echoValidator) Validate(i any) error { return validate.Struct(i) }
@@ -38,7 +41,7 @@ func TestHandler_Register(t *testing.T) {
 		t.Helper()
 		db := testhelper.NewMySQLContainer(t)
 		tx := testhelper.TestTx(t, db)
-		svc := auth.NewService(auth.NewUserRepository(tx), zap.NewNop())
+		svc := auth.NewService(auth.NewUserRepository(tx), zap.NewNop(), []byte("test-jwt-secret-that-is-at-least-64-characters-long-for-testing!"))
 		return &testBundle{
 			handler: auth.NewHandler(svc),
 			e:       newTestEcho(),
@@ -169,6 +172,119 @@ func TestHandler_Register(t *testing.T) {
 		}
 		if _, ok := raw["password_hash"]; ok {
 			t.Error("response must not contain password_hash")
+		}
+	})
+}
+
+func TestHandler_Login(t *testing.T) {
+	type testBundle struct {
+		handler *auth.Handler
+		e       *echo.Echo
+		tx      *gorm.DB
+	}
+
+	setup := func(t *testing.T) (*testBundle, context.Context) {
+		t.Helper()
+		db := testhelper.NewMySQLContainer(t)
+		tx := testhelper.TestTx(t, db)
+		svc := auth.NewService(auth.NewUserRepository(tx), zap.NewNop(), handlerTestSecret)
+		return &testBundle{
+			handler: auth.NewHandler(svc),
+			e:       newTestEcho(),
+			tx:      tx,
+		}, context.Background()
+	}
+
+	doRequest := func(t *testing.T, b *testBundle, body any) *httptest.ResponseRecorder {
+		t.Helper()
+		data, err := json.Marshal(body)
+		if err != nil {
+			t.Fatalf("json.Marshal: %v", err)
+		}
+		req := httptest.NewRequest(http.MethodPost, "/auth/login", bytes.NewReader(data))
+		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+		rec := httptest.NewRecorder()
+		c := b.e.NewContext(req, rec)
+		_ = b.handler.Login(c)
+		return rec
+	}
+
+	t.Run("returns 200 with token", func(t *testing.T) {
+		t.Parallel()
+		b, ctx := setup(t)
+
+		user := dbfactory.User(ctx, t, b.tx, nil)
+
+		rec := doRequest(t, b, auth.LoginRequest{
+			Email:    user.Email,
+			Password: "password",
+		})
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		var resp auth.LoginResponse
+		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		if resp.Token == "" {
+			t.Error("expected non-empty token")
+		}
+	})
+
+	t.Run("returns 401 on wrong password", func(t *testing.T) {
+		t.Parallel()
+		b, ctx := setup(t)
+
+		user := dbfactory.User(ctx, t, b.tx, nil)
+
+		rec := doRequest(t, b, auth.LoginRequest{
+			Email:    user.Email,
+			Password: "wrongpassword",
+		})
+
+		if rec.Code != http.StatusUnauthorized {
+			t.Errorf("expected 401, got %d", rec.Code)
+		}
+	})
+
+	t.Run("returns 401 on unknown email", func(t *testing.T) {
+		t.Parallel()
+		b, _ := setup(t)
+
+		rec := doRequest(t, b, auth.LoginRequest{
+			Email:    "ghost@example.com",
+			Password: "password",
+		})
+
+		if rec.Code != http.StatusUnauthorized {
+			t.Errorf("expected 401, got %d", rec.Code)
+		}
+	})
+
+	t.Run("returns 422 on missing fields", func(t *testing.T) {
+		t.Parallel()
+		b, _ := setup(t)
+
+		rec := doRequest(t, b, struct{}{})
+
+		if rec.Code != http.StatusUnprocessableEntity {
+			t.Errorf("expected 422, got %d", rec.Code)
+		}
+	})
+
+	t.Run("returns 422 on invalid email format", func(t *testing.T) {
+		t.Parallel()
+		b, _ := setup(t)
+
+		rec := doRequest(t, b, auth.LoginRequest{
+			Email:    "not-an-email",
+			Password: "password",
+		})
+
+		if rec.Code != http.StatusUnprocessableEntity {
+			t.Errorf("expected 422, got %d", rec.Code)
 		}
 	})
 }
