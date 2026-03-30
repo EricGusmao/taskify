@@ -46,9 +46,6 @@ A imagem de produção usa `gcr.io/distroless/static-debian13:nonroot` como base
 
 ## O Que Faria Diferente com Mais Tempo
 
-### Testes de Handler Mais Isolados
-
-Atualmente os handler tests sobem o stack completo (service + repository + banco). Isso é ótimo para cobertura, mas torna os testes de casos de erro de handler (ex: body inválido, parâmetro ausente) mais verbosos. Com mais tempo, adicionaria testes unitários para o handler usando um service mockado, mantendo os testes de integração para os fluxos felizes.
 
 ### Paginação por Cursor
 
@@ -100,6 +97,12 @@ A organização idiomática em Go seria separar os pacotes: o pacote `teams` def
 **Trade-off:** A regra de não importar uma fatia de outra (`teams` não importa `auth`) força duplicação de tipos em alguns casos. Por exemplo, `MemberWithUser` em `teams` replica campos de `auth.User`.
 
 **Decisão:** Aceitar a duplicação para manter o isolamento. A alternativa (um pacote `internal/types` compartilhado) cria acoplamento implícito e tende a crescer sem controle. Para este escopo, a duplicação é mínima e gerenciável.
+
+### Credenciais Hardcoded no docker-compose vs. `.env`
+
+**Trade-off:** O `docker-compose.yml` contém credenciais de desenvolvimento em texto plano (senhas do banco, JWT secret). Em produção, isso seria inaceitável — credenciais devem vir de um gerenciador de segredos (Vault, AWS Secrets Manager, variáveis de CI) e nunca ser commitadas.
+
+**Decisão:** Para um desafio técnico cujo objetivo é facilitar a avaliação local, eliminar o passo de "copie o `.env.example` e preencha as variáveis" reduz a fricção. O `docker-compose.yml` é explicitamente um artefato de desenvolvimento. Em produção, esse arquivo não seria usado — o deploy aconteceria via Kubernetes, ECS ou similar, onde os segredos são injetados pelo ambiente.
 
 ### Offset Pagination vs. Cursor Pagination
 

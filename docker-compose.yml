@@ -2,16 +2,16 @@ services:
   mysql:
     image: mysql:8.4
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${MYSQL_DATABASE}
-      MYSQL_USER: ${MYSQL_USER}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: taskify
+      MYSQL_USER: taskify
+      MYSQL_PASSWORD: taskifypassword
     ports:
       - "3306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -21,7 +21,7 @@ services:
     build: .
     entrypoint: ["/migrate"]
     environment:
-      DATABASE_DSN: ${DATABASE_DSN}
+      DATABASE_DSN: taskify:taskifypassword@tcp(mysql:3306)/taskify?parseTime=true
     depends_on:
       mysql:
         condition: service_healthy
@@ -30,12 +30,12 @@ services:
   api:
     build: .
     ports:
-      - "${PORT:-8080}:${PORT:-8080}"
+      - "8080:8080"
     environment:
-      DATABASE_DSN: ${DATABASE_DSN}
-      JWT_SECRET: ${JWT_SECRET}
-      PORT: ${PORT:-8080}
-      UPLOAD_PATH: ${UPLOAD_PATH:-/uploads/avatars}
+      DATABASE_DSN: taskify:taskifypassword@tcp(mysql:3306)/taskify?parseTime=true
+      JWT_SECRET: dev-jwt-secret-key-only-for-local-development-do-not-use-in-production-ever
+      PORT: "8080"
+      UPLOAD_PATH: /uploads/avatars
     volumes:
       - uploads:/uploads
     depends_on:
