@@ -1,0 +1,49 @@
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  migrate:
+    build: .
+    entrypoint: ["/migrate"]
+    environment:
+      DATABASE_DSN: ${DATABASE_DSN}
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: on-failure
+
+  api:
+    build: .
+    ports:
+      - "${PORT:-8080}:${PORT:-8080}"
+    environment:
+      DATABASE_DSN: ${DATABASE_DSN}
+      JWT_SECRET: ${JWT_SECRET}
+      PORT: ${PORT:-8080}
+      UPLOAD_PATH: ${UPLOAD_PATH:-/uploads/avatars}
+    volumes:
+      - uploads:/uploads
+    depends_on:
+      mysql:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  mysql_data:
+  uploads:

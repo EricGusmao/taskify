@@ -1,0 +1,8 @@
+.git
+.env
+uploads/
+*.md
+docker-compose.yml
+.dockerignore
+.gitignore
+.claude/
