@@ -14,6 +14,7 @@ import (
 	"github.com/EricGusmao/taskify/internal/middleware"
 	"github.com/EricGusmao/taskify/internal/tasks"
 	"github.com/EricGusmao/taskify/internal/teams"
+	"github.com/EricGusmao/taskify/internal/users"
 	"github.com/EricGusmao/taskify/internal/validate"
 	"github.com/labstack/echo/v5"
 	echomw "github.com/labstack/echo/v5/middleware"
@@ -92,6 +93,23 @@ func run(ctx context.Context, getenv func(string) string) error {
 	tasksGroup := e.Group("/tasks")
 	tasksGroup.Use(middleware.JWTAuth([]byte(jwtSecret)))
 	tasks.RegisterTaskRoutes(tasksGroup, tasksHandler)
+
+	uploadPath := getenv("UPLOAD_PATH")
+	if uploadPath == "" {
+		uploadPath = "./uploads/avatars"
+	}
+	localStorage, err := users.NewLocalStorage(uploadPath)
+	if err != nil {
+		return fmt.Errorf("failed to create local storage: %w", err)
+	}
+	usersRepo := users.NewRepository(db)
+	usersSvc := users.NewService(usersRepo, localStorage, logger)
+	usersHandler := users.NewHandler(usersSvc)
+	usersGroup := e.Group("/users")
+	usersGroup.Use(middleware.JWTAuth([]byte(jwtSecret)))
+	usersGroup.Use(echomw.BodyLimit(5 << 20))
+	users.RegisterRoutes(usersGroup, usersHandler)
+	e.Static("/uploads", "./uploads")
 
 	sc := echo.StartConfig{
 		Address:         ":" + getenv("PORT"),

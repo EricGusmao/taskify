@@ -10,4 +10,5 @@ type User struct {
 	Email        string `gorm:"uniqueIndex;not null;size:255"`
 	PasswordHash string `gorm:"not null"`
 	Score        int    `gorm:"default:0;not null"`
+	AvatarURL    string `gorm:"size:512"`
 }
