@@ -35,7 +35,7 @@ services:
       DATABASE_DSN: taskify:taskifypassword@tcp(mysql:3306)/taskify?parseTime=true
       JWT_SECRET: dev-jwt-secret-key-only-for-local-development-do-not-use-in-production-ever
       PORT: "8080"
-      UPLOAD_PATH: /uploads/avatars
+      UPLOAD_PATH: /uploads
     volumes:
       - uploads:/uploads
     depends_on:
