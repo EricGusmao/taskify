@@ -168,11 +168,11 @@ func (h *Handler) Complete(c *echo.Context) error {
 
 	rawUserID, ok := c.Get(middleware.ContextKeyUserID).(string)
 	if !ok || rawUserID == "" {
-		return echo.NewHTTPError(http.StatusInternalServerError, "internal server error")
+		return echo.NewHTTPError(http.StatusUnauthorized, "missing user id")
 	}
 	userID, err := strconv.ParseUint(rawUserID, 10, 64)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "internal server error")
+		return echo.NewHTTPError(http.StatusUnauthorized, "invalid user id")
 	}
 
 	task, err := h.svc.Complete(c.Request().Context(), uint(taskID), uint(userID))

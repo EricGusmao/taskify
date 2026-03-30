@@ -67,7 +67,7 @@ func (r *gormRepository) IsMember(ctx context.Context, teamID uint, userID uint)
 
 // ListByTeam returns a paginated list of tasks for the given team, with an optional done filter.
 func (r *gormRepository) ListByTeam(ctx context.Context, teamID uint, done *bool, page, pageSize int) ([]Task, int64, error) {
-	base := r.db.WithContext(ctx).Model(&Task{}).Where("team_id = ? AND deleted_at IS NULL", teamID)
+	base := r.db.WithContext(ctx).Model(&Task{}).Where("team_id = ?", teamID)
 	if done != nil {
 		if *done {
 			base = base.Where("done_at IS NOT NULL")

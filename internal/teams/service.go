@@ -7,14 +7,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// TeamRepository is the persistence interface required by Service.
-type TeamRepository interface {
-	Create(ctx context.Context, team *Team) error
-	FindByID(ctx context.Context, id uint) (*Team, error)
-	AddMember(ctx context.Context, teamID, userID uint) error
-	ListMembers(ctx context.Context, teamID uint, page, pageSize int) ([]MemberWithUser, int64, error)
-	ListRanking(ctx context.Context, teamID uint, page, pageSize int) ([]MemberWithUser, int64, error)
-}
 
 // UserRepository checks user existence.
 type UserRepository interface {
@@ -23,13 +15,13 @@ type UserRepository interface {
 
 // Service handles business logic for teams.
 type Service struct {
-	repo     TeamRepository
+	repo     Repository
 	userRepo UserRepository
 	logger   *zap.Logger
 }
 
 // NewService returns a Service with the provided repositories and logger.
-func NewService(repo TeamRepository, userRepo UserRepository, logger *zap.Logger) *Service {
+func NewService(repo Repository, userRepo UserRepository, logger *zap.Logger) *Service {
 	return &Service{repo: repo, userRepo: userRepo, logger: logger}
 }
 

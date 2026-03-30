@@ -14,7 +14,7 @@ type gormUserRepository struct {
 }
 
 // NewUserRepository returns a UserRepository backed by GORM.
-func NewUserRepository(db *gorm.DB) *gormUserRepository {
+func NewUserRepository(db *gorm.DB) UserRepository {
 	return &gormUserRepository{db: db}
 }
 

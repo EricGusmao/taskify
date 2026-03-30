@@ -128,7 +128,7 @@ func TestHandler_Complete(t *testing.T) {
 		}
 	})
 
-	t.Run("returns 500 when jwt context key is absent", func(t *testing.T) {
+	t.Run("returns 401 when jwt context key is absent", func(t *testing.T) {
 		t.Parallel()
 		b, ctx := setup(t)
 
@@ -146,8 +146,8 @@ func TestHandler_Complete(t *testing.T) {
 			e.HTTPErrorHandler(c, err)
 		}
 
-		if rec.Code != http.StatusInternalServerError {
-			t.Errorf("expected 500, got %d", rec.Code)
+		if rec.Code != http.StatusUnauthorized {
+			t.Errorf("expected 401, got %d", rec.Code)
 		}
 	})
 }
