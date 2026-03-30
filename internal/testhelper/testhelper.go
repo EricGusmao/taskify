@@ -10,6 +10,7 @@ import (
 
 	"github.com/EricGusmao/taskify/internal/auth"
 	"github.com/EricGusmao/taskify/internal/infra"
+	"github.com/EricGusmao/taskify/internal/tasks"
 	"github.com/EricGusmao/taskify/internal/teams"
 	"github.com/testcontainers/testcontainers-go/modules/mysql"
 	"gorm.io/gorm"
@@ -59,7 +60,7 @@ func NewMySQLContainer(t testing.TB) *gorm.DB {
 			return
 		}
 
-		if err := db.AutoMigrate(&auth.User{}, &teams.Team{}, &teams.Member{}); err != nil {
+		if err := db.AutoMigrate(&auth.User{}, &teams.Team{}, &teams.Member{}, &tasks.Task{}); err != nil {
 			setupErr = err
 			return
 		}

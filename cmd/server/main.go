@@ -12,6 +12,7 @@ import (
 	"github.com/EricGusmao/taskify/internal/auth"
 	"github.com/EricGusmao/taskify/internal/infra"
 	"github.com/EricGusmao/taskify/internal/middleware"
+	"github.com/EricGusmao/taskify/internal/tasks"
 	"github.com/EricGusmao/taskify/internal/teams"
 	"github.com/EricGusmao/taskify/internal/validate"
 	"github.com/labstack/echo/v5"
@@ -82,6 +83,11 @@ func run(ctx context.Context, getenv func(string) string) error {
 	teamsGroup := e.Group("/teams")
 	teamsGroup.Use(middleware.JWTAuth([]byte(jwtSecret)))
 	teams.RegisterRoutes(teamsGroup, teamsHandler)
+
+	tasksRepo := tasks.NewRepository(db)
+	tasksSvc := tasks.NewService(tasksRepo, logger)
+	tasksHandler := tasks.NewHandler(tasksSvc)
+	tasks.RegisterRoutes(teamsGroup, tasksHandler)
 
 	sc := echo.StartConfig{
 		Address:         ":" + getenv("PORT"),

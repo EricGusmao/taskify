@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/EricGusmao/taskify/internal/auth"
+	"github.com/EricGusmao/taskify/internal/tasks"
 	"github.com/EricGusmao/taskify/internal/teams"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
@@ -92,6 +94,51 @@ func Member(ctx context.Context, t *testing.T, tx *gorm.DB, opts *MemberOpts) *t
 // TeamOpts configures the Team factory.
 type TeamOpts struct {
 	Name string
+}
+
+// TaskOpts configures the Task factory. TeamID is required.
+type TaskOpts struct {
+	Title        string
+	Points       int
+	TeamID       uint
+	DoneByUserID *uint
+	DoneAt       *time.Time
+}
+
+// Task inserts a tasks.Task into the database and returns it.
+// Calls t.Fatal on any error. TeamID is required.
+func Task(ctx context.Context, t *testing.T, tx *gorm.DB, opts *TaskOpts) *tasks.Task {
+	t.Helper()
+
+	if opts == nil {
+		t.Fatal("dbfactory.Task: opts is required")
+	}
+	if opts.TeamID == 0 {
+		t.Fatal("dbfactory.Task: TeamID is required")
+	}
+
+	title := opts.Title
+	if title == "" {
+		title = fmt.Sprintf("Task %s", seqStr())
+	}
+
+	points := opts.Points
+	if points == 0 {
+		points = 10
+	}
+
+	task := &tasks.Task{
+		Title:        title,
+		Points:       points,
+		TeamID:       opts.TeamID,
+		DoneByUserID: opts.DoneByUserID,
+		DoneAt:       opts.DoneAt,
+	}
+	if err := gorm.G[tasks.Task](tx).Create(ctx, task); err != nil {
+		t.Fatalf("dbfactory.Task: %v", err)
+	}
+
+	return task
 }
 
 // Team inserts a teams.Team into the database and returns it.
