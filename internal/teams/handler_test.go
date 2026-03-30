@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -39,7 +40,7 @@ func TestHandler_Create(t *testing.T) {
 		t.Helper()
 		db := testhelper.NewMySQLContainer(t)
 		tx := testhelper.TestTx(t, db)
-		svc := teams.NewService(teams.NewRepository(tx), zap.NewNop())
+		svc := teams.NewService(teams.NewRepository(tx), teams.NewUserRepository(tx), zap.NewNop())
 		return &testBundle{
 			handler: teams.NewHandler(svc),
 			e:       newTestEcho(),
@@ -57,7 +58,9 @@ func TestHandler_Create(t *testing.T) {
 		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 		rec := httptest.NewRecorder()
 		c := b.e.NewContext(req, rec)
-		_ = b.handler.Create(c)
+		if err := b.handler.Create(c); err != nil {
+			b.e.HTTPErrorHandler(c, err)
+		}
 		return rec
 	}
 
@@ -125,6 +128,133 @@ func TestHandler_Create(t *testing.T) {
 
 		if rec.Code != http.StatusUnprocessableEntity {
 			t.Errorf("expected 422, got %d", rec.Code)
+		}
+	})
+}
+
+func TestHandler_AddMember(t *testing.T) {
+	type testBundle struct {
+		handler *teams.Handler
+		e       *echo.Echo
+		tx      *gorm.DB
+	}
+
+	setup := func(t *testing.T) (*testBundle, context.Context) {
+		t.Helper()
+		db := testhelper.NewMySQLContainer(t)
+		tx := testhelper.TestTx(t, db)
+		svc := teams.NewService(teams.NewRepository(tx), teams.NewUserRepository(tx), zap.NewNop())
+		return &testBundle{
+			handler: teams.NewHandler(svc),
+			e:       newTestEcho(),
+			tx:      tx,
+		}, context.Background()
+	}
+
+	doRequest := func(t *testing.T, b *testBundle, teamID string, body any) *httptest.ResponseRecorder {
+		t.Helper()
+		data, err := json.Marshal(body)
+		if err != nil {
+			t.Fatalf("json.Marshal: %v", err)
+		}
+		req := httptest.NewRequest(http.MethodPost, "/teams/"+teamID+"/members", bytes.NewReader(data))
+		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+		rec := httptest.NewRecorder()
+		c := b.e.NewContext(req, rec)
+		c.SetPathValues(echo.PathValues{{Name: "id", Value: teamID}})
+		if err := b.handler.AddMember(c); err != nil {
+			b.e.HTTPErrorHandler(c, err)
+		}
+		return rec
+	}
+
+	t.Run("returns 201 with member data", func(t *testing.T) {
+		t.Parallel()
+		b, ctx := setup(t)
+
+		user := dbfactory.User(ctx, t, b.tx, nil)
+		team := dbfactory.Team(ctx, t, b.tx, nil)
+
+		rec := doRequest(t, b, fmt.Sprintf("%d", team.ID), teams.AddMemberRequest{UserID: user.ID})
+
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		var resp teams.AddMemberResponse
+		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		if resp.TeamID != team.ID {
+			t.Errorf("expected TeamID %d, got %d", team.ID, resp.TeamID)
+		}
+		if resp.UserID != user.ID {
+			t.Errorf("expected UserID %d, got %d", user.ID, resp.UserID)
+		}
+	})
+
+	t.Run("returns 404 for nonexistent team", func(t *testing.T) {
+		t.Parallel()
+		b, ctx := setup(t)
+
+		user := dbfactory.User(ctx, t, b.tx, nil)
+
+		rec := doRequest(t, b, "999999", teams.AddMemberRequest{UserID: user.ID})
+
+		if rec.Code != http.StatusNotFound {
+			t.Errorf("expected 404, got %d", rec.Code)
+		}
+	})
+
+	t.Run("returns 404 for nonexistent user", func(t *testing.T) {
+		t.Parallel()
+		b, ctx := setup(t)
+
+		team := dbfactory.Team(ctx, t, b.tx, nil)
+
+		rec := doRequest(t, b, fmt.Sprintf("%d", team.ID), teams.AddMemberRequest{UserID: 999999})
+
+		if rec.Code != http.StatusNotFound {
+			t.Errorf("expected 404, got %d", rec.Code)
+		}
+	})
+
+	t.Run("returns 409 on duplicate membership", func(t *testing.T) {
+		t.Parallel()
+		b, ctx := setup(t)
+
+		user := dbfactory.User(ctx, t, b.tx, nil)
+		team := dbfactory.Team(ctx, t, b.tx, nil)
+		dbfactory.Member(ctx, t, b.tx, &dbfactory.MemberOpts{TeamID: team.ID, UserID: user.ID})
+
+		rec := doRequest(t, b, fmt.Sprintf("%d", team.ID), teams.AddMemberRequest{UserID: user.ID})
+
+		if rec.Code != http.StatusConflict {
+			t.Errorf("expected 409, got %d", rec.Code)
+		}
+	})
+
+	t.Run("returns 422 on missing user_id", func(t *testing.T) {
+		t.Parallel()
+		b, ctx := setup(t)
+
+		team := dbfactory.Team(ctx, t, b.tx, nil)
+
+		rec := doRequest(t, b, fmt.Sprintf("%d", team.ID), struct{}{})
+
+		if rec.Code != http.StatusUnprocessableEntity {
+			t.Errorf("expected 422, got %d", rec.Code)
+		}
+	})
+
+	t.Run("returns 400 on invalid team id", func(t *testing.T) {
+		t.Parallel()
+		b, _ := setup(t)
+
+		rec := doRequest(t, b, "abc", teams.AddMemberRequest{UserID: 1})
+
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("expected 400, got %d", rec.Code)
 		}
 	})
 }

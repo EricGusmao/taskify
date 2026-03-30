@@ -54,7 +54,12 @@ func NewMySQLContainer(t testing.TB) *gorm.DB {
 			return
 		}
 
-		if err := db.AutoMigrate(&auth.User{}, &teams.Team{}); err != nil {
+		if err := db.SetupJoinTable(&teams.Team{}, "Users", &teams.Member{}); err != nil {
+			setupErr = err
+			return
+		}
+
+		if err := db.AutoMigrate(&auth.User{}, &teams.Team{}, &teams.Member{}); err != nil {
 			setupErr = err
 			return
 		}

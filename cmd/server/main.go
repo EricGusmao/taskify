@@ -76,7 +76,8 @@ func run(ctx context.Context, getenv func(string) string) error {
 	auth.RegisterRoutes(e.Group("/auth"), authHandler)
 
 	teamsRepo := teams.NewRepository(db)
-	teamsSvc := teams.NewService(teamsRepo, logger)
+	teamsUserRepo := teams.NewUserRepository(db)
+	teamsSvc := teams.NewService(teamsRepo, teamsUserRepo, logger)
 	teamsHandler := teams.NewHandler(teamsSvc)
 	teamsGroup := e.Group("/teams")
 	teamsGroup.Use(middleware.JWTAuth([]byte(jwtSecret)))

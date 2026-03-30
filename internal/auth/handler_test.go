@@ -59,7 +59,9 @@ func TestHandler_Register(t *testing.T) {
 		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 		rec := httptest.NewRecorder()
 		c := b.e.NewContext(req, rec)
-		_ = b.handler.Register(c)
+		if err := b.handler.Register(c); err != nil {
+			b.e.HTTPErrorHandler(c, err)
+		}
 		return rec
 	}
 
@@ -205,7 +207,9 @@ func TestHandler_Login(t *testing.T) {
 		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 		rec := httptest.NewRecorder()
 		c := b.e.NewContext(req, rec)
-		_ = b.handler.Login(c)
+		if err := b.handler.Login(c); err != nil {
+			b.e.HTTPErrorHandler(c, err)
+		}
 		return rec
 	}
 

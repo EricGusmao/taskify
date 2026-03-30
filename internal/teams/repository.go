@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/EricGusmao/taskify/internal/auth"
 	mysql "github.com/go-sql-driver/mysql"
 	"gorm.io/gorm"
 )
@@ -12,6 +13,8 @@ import (
 // Repository handles persistence for the teams slice.
 type Repository interface {
 	Create(ctx context.Context, team *Team) error
+	FindByID(ctx context.Context, id uint) (*Team, error)
+	AddMember(ctx context.Context, teamID, userID uint) error
 }
 
 type gormRepository struct {
@@ -19,7 +22,7 @@ type gormRepository struct {
 }
 
 // NewRepository returns a Repository backed by GORM.
-func NewRepository(db *gorm.DB) Repository {
+func NewRepository(db *gorm.DB) *gormRepository {
 	return &gormRepository{db: db}
 }
 
@@ -31,4 +34,49 @@ func (r *gormRepository) Create(ctx context.Context, team *Team) error {
 		return fmt.Errorf("teams.repository.Create: %w", err)
 	}
 	return nil
+}
+
+// FindByID returns the team with the given ID.
+func (r *gormRepository) FindByID(ctx context.Context, id uint) (*Team, error) {
+	team, err := gorm.G[Team](r.db).Where("id = ?", id).First(ctx)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf("teams.repository.FindByID: %w", ErrTeamNotFound)
+		}
+		return nil, fmt.Errorf("teams.repository.FindByID: %w", err)
+	}
+	return &team, nil
+}
+
+// AddMember inserts a row into the members join table directly to allow
+// duplicate-key detection. GORM's Association.Append uses ON CONFLICT DO NOTHING,
+// which would silently swallow duplicates.
+func (r *gormRepository) AddMember(ctx context.Context, teamID, userID uint) error {
+	member := &Member{TeamID: teamID, UserID: userID}
+	if err := gorm.G[Member](r.db).Create(ctx, member); err != nil {
+		if mysqlErr, ok := errors.AsType[*mysql.MySQLError](err); ok && mysqlErr.Number == 1062 {
+			return fmt.Errorf("teams.repository.AddMember: %w", ErrAlreadyMember)
+		}
+		return fmt.Errorf("teams.repository.AddMember: %w", err)
+	}
+	return nil
+}
+
+// gormUserRepository checks user existence.
+type gormUserRepository struct {
+	db *gorm.DB
+}
+
+// NewUserRepository returns a UserRepository backed by GORM.
+func NewUserRepository(db *gorm.DB) *gormUserRepository {
+	return &gormUserRepository{db: db}
+}
+
+// Exists reports whether a user with the given ID exists.
+func (r *gormUserRepository) Exists(ctx context.Context, id uint) (bool, error) {
+	count, err := gorm.G[auth.User](r.db).Where("id = ?", id).Count(ctx, "*")
+	if err != nil {
+		return false, fmt.Errorf("teams.userRepository.Exists: %w", err)
+	}
+	return count > 0, nil
 }

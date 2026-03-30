@@ -24,7 +24,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := db.AutoMigrate(&auth.User{}, &teams.Team{}); err != nil {
+	if err := db.SetupJoinTable(&teams.Team{}, "Users", &teams.Member{}); err != nil {
+		fmt.Fprintf(os.Stderr, "migrate: setup join table: %v\n", err)
+		os.Exit(1)
+	}
+
+	if err := db.AutoMigrate(&auth.User{}, &teams.Team{}, &teams.Member{}); err != nil {
 		fmt.Fprintf(os.Stderr, "migrate: auto migrate: %v\n", err)
 		os.Exit(1)
 	}

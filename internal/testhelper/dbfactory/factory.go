@@ -68,6 +68,27 @@ func User(ctx context.Context, t *testing.T, tx *gorm.DB, opts *UserOpts) *auth.
 	return u
 }
 
+// MemberOpts configures the Member factory. Both UserID and TeamID are required.
+type MemberOpts struct {
+	UserID uint
+	TeamID uint
+}
+
+// Member inserts a teams.Member into the database and returns it.
+// Calls t.Fatal on any error.
+func Member(ctx context.Context, t *testing.T, tx *gorm.DB, opts *MemberOpts) *teams.Member {
+	t.Helper()
+	if opts == nil {
+		t.Fatal("dbfactory.Member: opts is required")
+	}
+
+	member := &teams.Member{TeamID: opts.TeamID, UserID: opts.UserID}
+	if err := tx.WithContext(ctx).Create(member).Error; err != nil {
+		t.Fatalf("dbfactory.Member: %v", err)
+	}
+	return member
+}
+
 // TeamOpts configures the Team factory.
 type TeamOpts struct {
 	Name string

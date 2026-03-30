@@ -23,8 +23,9 @@ func TestService_Create(t *testing.T) {
 		db := testhelper.NewMySQLContainer(t)
 		tx := testhelper.TestTx(t, db)
 		repo := teams.NewRepository(tx)
+		userRepo := teams.NewUserRepository(tx)
 		return &testBundle{
-			svc: teams.NewService(repo, zap.NewNop()),
+			svc: teams.NewService(repo, userRepo, zap.NewNop()),
 			tx:  tx,
 		}, ctx
 	}

@@ -7,7 +7,7 @@ import "gorm.io/gorm"
 type User struct {
 	gorm.Model
 	Name         string `gorm:"not null"`
-	Email        string `gorm:"uniqueIndex;not null"`
+	Email        string `gorm:"uniqueIndex;not null;size:255"`
 	PasswordHash string `gorm:"not null"`
 	Score        int    `gorm:"default:0;not null"`
 }
