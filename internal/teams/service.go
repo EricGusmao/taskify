@@ -12,6 +12,7 @@ type TeamRepository interface {
 	Create(ctx context.Context, team *Team) error
 	FindByID(ctx context.Context, id uint) (*Team, error)
 	AddMember(ctx context.Context, teamID, userID uint) error
+	ListMembers(ctx context.Context, teamID uint, page, pageSize int) ([]MemberWithUser, int64, error)
 }
 
 // UserRepository checks user existence.
@@ -73,4 +74,38 @@ func (s *Service) AddMember(ctx context.Context, input AddMemberInput) (*Member,
 
 	s.logger.Debug("member added", zap.Uint("team_id", input.TeamID), zap.Uint("user_id", input.UserID))
 	return &Member{TeamID: input.TeamID, UserID: input.UserID}, nil
+}
+
+// ListMembersInput holds the input for the ListMembers method.
+type ListMembersInput struct {
+	TeamID   uint
+	Page     int
+	PageSize int
+}
+
+// MembersPage is the paginated result of ListMembers.
+type MembersPage struct {
+	Data     []MemberWithUser
+	Page     int
+	PageSize int
+	Total    int64
+}
+
+// ListMembers returns a paginated list of members for a team.
+func (s *Service) ListMembers(ctx context.Context, input ListMembersInput) (*MembersPage, error) {
+	if _, err := s.repo.FindByID(ctx, input.TeamID); err != nil {
+		return nil, fmt.Errorf("teams.service.ListMembers: %w", err)
+	}
+
+	members, total, err := s.repo.ListMembers(ctx, input.TeamID, input.Page, input.PageSize)
+	if err != nil {
+		return nil, fmt.Errorf("teams.service.ListMembers: %w", err)
+	}
+
+	return &MembersPage{
+		Data:     members,
+		Page:     input.Page,
+		PageSize: input.PageSize,
+		Total:    total,
+	}, nil
 }

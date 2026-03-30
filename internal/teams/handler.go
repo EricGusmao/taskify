@@ -66,6 +66,70 @@ type AddMemberResponse struct {
 	UserID uint `json:"user_id"`
 }
 
+// MemberResponse is a single member entry in the list response.
+type MemberResponse struct {
+	UserID uint   `json:"user_id"`
+	Name   string `json:"name"`
+	Email  string `json:"email"`
+	Score  int    `json:"score"`
+}
+
+// ListMembersResponse is the paginated response for GET /teams/:id/members.
+type ListMembersResponse struct {
+	Data     []MemberResponse `json:"data"`
+	Page     int              `json:"page"`
+	PageSize int              `json:"page_size"`
+	Total    int64            `json:"total"`
+}
+
+// ListMembers handles GET /teams/:id/members.
+func (h *Handler) ListMembers(c *echo.Context) error {
+	rawID := c.Param("id")
+	teamID, err := strconv.ParseUint(rawID, 10, 64)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid team id")
+	}
+
+	page := 1
+	if v, err := strconv.Atoi(c.QueryParam("page")); err == nil && v >= 1 {
+		page = v
+	}
+
+	pageSize := 20
+	if v, err := strconv.Atoi(c.QueryParam("page_size")); err == nil && v >= 1 && v <= 100 {
+		pageSize = v
+	}
+
+	result, err := h.svc.ListMembers(c.Request().Context(), ListMembersInput{
+		TeamID:   uint(teamID),
+		Page:     page,
+		PageSize: pageSize,
+	})
+	if err != nil {
+		if errors.Is(err, ErrTeamNotFound) {
+			return echo.NewHTTPError(http.StatusNotFound, "team not found")
+		}
+		return err
+	}
+
+	data := make([]MemberResponse, len(result.Data))
+	for i, m := range result.Data {
+		data[i] = MemberResponse{
+			UserID: m.UserID,
+			Name:   m.Name,
+			Email:  m.Email,
+			Score:  m.Score,
+		}
+	}
+
+	return c.JSON(http.StatusOK, ListMembersResponse{
+		Data:     data,
+		Page:     result.Page,
+		PageSize: result.PageSize,
+		Total:    result.Total,
+	})
+}
+
 // AddMember handles POST /teams/:id/members.
 func (h *Handler) AddMember(c *echo.Context) error {
 	rawID := c.Param("id")

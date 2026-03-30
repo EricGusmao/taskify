@@ -20,3 +20,11 @@ type Member struct {
 	UserID    uint      `gorm:"primaryKey"`
 	CreatedAt time.Time
 }
+
+// MemberWithUser holds a team member's user details and score for list responses.
+type MemberWithUser struct {
+	UserID uint
+	Name   string
+	Email  string
+	Score  int
+}
