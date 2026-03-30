@@ -7,3 +7,8 @@ import "github.com/labstack/echo/v5"
 func RegisterRoutes(g *echo.Group, h *Handler) {
 	g.POST("/:id/tasks", h.Create)
 }
+
+// RegisterTaskRoutes registers routes on the /tasks group.
+func RegisterTaskRoutes(g *echo.Group, h *Handler) {
+	g.PATCH("/:id/complete", h.Complete)
+}

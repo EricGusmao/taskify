@@ -89,6 +89,10 @@ func run(ctx context.Context, getenv func(string) string) error {
 	tasksHandler := tasks.NewHandler(tasksSvc)
 	tasks.RegisterRoutes(teamsGroup, tasksHandler)
 
+	tasksGroup := e.Group("/tasks")
+	tasksGroup.Use(middleware.JWTAuth([]byte(jwtSecret)))
+	tasks.RegisterTaskRoutes(tasksGroup, tasksHandler)
+
 	sc := echo.StartConfig{
 		Address:         ":" + getenv("PORT"),
 		GracefulTimeout: 30 * time.Second,

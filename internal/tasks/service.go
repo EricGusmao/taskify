@@ -3,6 +3,7 @@ package tasks
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"go.uber.org/zap"
 )
@@ -45,5 +46,36 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (*Task, error) 
 	}
 
 	s.logger.Info("task created", zap.Uint("team_id", input.TeamID), zap.String("title", input.Title))
+	return task, nil
+}
+
+// Complete marks the task as completed by the given user and adds the task's points to their score.
+func (s *Service) Complete(ctx context.Context, taskID uint, userID uint) (*Task, error) {
+	task, err := s.repo.FindByID(ctx, taskID)
+	if err != nil {
+		return nil, fmt.Errorf("tasks.service.Complete: %w", err)
+	}
+
+	isMember, err := s.repo.IsMember(ctx, task.TeamID, userID)
+	if err != nil {
+		return nil, fmt.Errorf("tasks.service.Complete: %w", err)
+	}
+	if !isMember {
+		return nil, fmt.Errorf("tasks.service.Complete: %w", ErrNotMember)
+	}
+
+	if err := s.repo.Complete(ctx, taskID, userID, task.Points); err != nil {
+		return nil, fmt.Errorf("tasks.service.Complete: %w", err)
+	}
+
+	s.logger.Info("task completed",
+		zap.Uint("task_id", taskID),
+		zap.Uint("user_id", userID),
+		zap.Int("points", task.Points),
+	)
+
+	now := time.Now()
+	task.DoneByUserID = &userID
+	task.DoneAt = &now
 	return task, nil
 }
