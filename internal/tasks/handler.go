@@ -70,6 +70,84 @@ func (h *Handler) Create(c *echo.Context) error {
 	})
 }
 
+// TaskItemResponse is a single task entry in the list response.
+type TaskItemResponse struct {
+	ID           uint       `json:"id"`
+	Title        string     `json:"title"`
+	Points       int        `json:"points"`
+	TeamID       uint       `json:"team_id"`
+	DoneByUserID *uint      `json:"done_by_user_id"`
+	DoneAt       *time.Time `json:"done_at"`
+}
+
+// ListByTeamResponse is the paginated response for GET /teams/:id/tasks.
+type ListByTeamResponse struct {
+	Data     []TaskItemResponse `json:"data"`
+	Page     int                `json:"page"`
+	PageSize int                `json:"page_size"`
+	Total    int64              `json:"total"`
+}
+
+// ListByTeam handles GET /teams/:id/tasks.
+func (h *Handler) ListByTeam(c *echo.Context) error {
+	rawID := c.Param("id")
+	teamID, err := strconv.ParseUint(rawID, 10, 64)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid team id")
+	}
+
+	var done *bool
+	if v := c.QueryParam("done"); v == "true" {
+		t := true
+		done = &t
+	} else if v == "false" {
+		f := false
+		done = &f
+	}
+
+	page := 1
+	if v, err := strconv.Atoi(c.QueryParam("page")); err == nil && v >= 1 {
+		page = v
+	}
+
+	pageSize := 20
+	if v, err := strconv.Atoi(c.QueryParam("page_size")); err == nil && v >= 1 && v <= 100 {
+		pageSize = v
+	}
+
+	result, err := h.svc.ListByTeam(c.Request().Context(), ListByTeamInput{
+		TeamID:   uint(teamID),
+		Done:     done,
+		Page:     page,
+		PageSize: pageSize,
+	})
+	if err != nil {
+		if errors.Is(err, ErrTeamNotFound) {
+			return echo.NewHTTPError(http.StatusNotFound, "team not found")
+		}
+		return echo.NewHTTPError(http.StatusInternalServerError, "internal server error")
+	}
+
+	data := make([]TaskItemResponse, len(result.Data))
+	for i, task := range result.Data {
+		data[i] = TaskItemResponse{
+			ID:           task.ID,
+			Title:        task.Title,
+			Points:       task.Points,
+			TeamID:       task.TeamID,
+			DoneByUserID: task.DoneByUserID,
+			DoneAt:       task.DoneAt,
+		}
+	}
+
+	return c.JSON(http.StatusOK, ListByTeamResponse{
+		Data:     data,
+		Page:     result.Page,
+		PageSize: result.PageSize,
+		Total:    result.Total,
+	})
+}
+
 // CompleteResponse is returned on successful task completion.
 type CompleteResponse struct {
 	ID           uint       `json:"id"`

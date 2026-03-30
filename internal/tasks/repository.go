@@ -16,6 +16,7 @@ type TaskRepository interface {
 	FindByID(ctx context.Context, taskID uint) (*Task, error)
 	IsMember(ctx context.Context, teamID uint, userID uint) (bool, error)
 	Complete(ctx context.Context, taskID uint, userID uint, points int) error
+	ListByTeam(ctx context.Context, teamID uint, done *bool, page, pageSize int) ([]Task, int64, error)
 }
 
 type gormRepository struct {
@@ -62,6 +63,31 @@ func (r *gormRepository) IsMember(ctx context.Context, teamID uint, userID uint)
 		return false, fmt.Errorf("tasks.repository.IsMember: %w", err)
 	}
 	return count > 0, nil
+}
+
+// ListByTeam returns a paginated list of tasks for the given team, with an optional done filter.
+func (r *gormRepository) ListByTeam(ctx context.Context, teamID uint, done *bool, page, pageSize int) ([]Task, int64, error) {
+	base := r.db.WithContext(ctx).Model(&Task{}).Where("team_id = ? AND deleted_at IS NULL", teamID)
+	if done != nil {
+		if *done {
+			base = base.Where("done_at IS NOT NULL")
+		} else {
+			base = base.Where("done_at IS NULL")
+		}
+	}
+
+	var total int64
+	if err := base.Count(&total).Error; err != nil {
+		return nil, 0, fmt.Errorf("tasks.repository.ListByTeam: %w", err)
+	}
+
+	var list []Task
+	offset := (page - 1) * pageSize
+	if err := base.Order("created_at DESC").Limit(pageSize).Offset(offset).Find(&list).Error; err != nil {
+		return nil, 0, fmt.Errorf("tasks.repository.ListByTeam: %w", err)
+	}
+
+	return list, total, nil
 }
 
 // Complete atomically marks a task as done and increments the user's score.

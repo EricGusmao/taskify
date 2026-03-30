@@ -49,6 +49,45 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (*Task, error) 
 	return task, nil
 }
 
+// ListByTeamInput holds the input for the ListByTeam method.
+type ListByTeamInput struct {
+	TeamID   uint
+	Done     *bool
+	Page     int
+	PageSize int
+}
+
+// TasksPage is the paginated result returned by ListByTeam.
+type TasksPage struct {
+	Data     []Task
+	Page     int
+	PageSize int
+	Total    int64
+}
+
+// ListByTeam returns a paginated list of tasks for the given team.
+func (s *Service) ListByTeam(ctx context.Context, input ListByTeamInput) (*TasksPage, error) {
+	exists, err := s.repo.TeamExists(ctx, input.TeamID)
+	if err != nil {
+		return nil, fmt.Errorf("tasks.service.ListByTeam: %w", err)
+	}
+	if !exists {
+		return nil, fmt.Errorf("tasks.service.ListByTeam: %w", ErrTeamNotFound)
+	}
+
+	list, total, err := s.repo.ListByTeam(ctx, input.TeamID, input.Done, input.Page, input.PageSize)
+	if err != nil {
+		return nil, fmt.Errorf("tasks.service.ListByTeam: %w", err)
+	}
+
+	return &TasksPage{
+		Data:     list,
+		Page:     input.Page,
+		PageSize: input.PageSize,
+		Total:    total,
+	}, nil
+}
+
 // Complete marks the task as completed by the given user and adds the task's points to their score.
 func (s *Service) Complete(ctx context.Context, taskID uint, userID uint) (*Task, error) {
 	task, err := s.repo.FindByID(ctx, taskID)

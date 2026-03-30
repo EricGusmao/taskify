@@ -6,6 +6,7 @@ import "github.com/labstack/echo/v5"
 // g is expected to be the /teams group so that routes resolve as /teams/:id/tasks.
 func RegisterRoutes(g *echo.Group, h *Handler) {
 	g.POST("/:id/tasks", h.Create)
+	g.GET("/:id/tasks", h.ListByTeam)
 }
 
 // RegisterTaskRoutes registers routes on the /tasks group.
