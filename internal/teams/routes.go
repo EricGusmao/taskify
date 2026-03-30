@@ -7,4 +7,5 @@ func RegisterRoutes(g *echo.Group, h *Handler) {
 	g.POST("", h.Create)
 	g.POST("/:id/members", h.AddMember)
 	g.GET("/:id/members", h.ListMembers)
+	g.GET("/:id/ranking", h.GetRanking)
 }

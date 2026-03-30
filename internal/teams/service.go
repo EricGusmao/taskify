@@ -13,6 +13,7 @@ type TeamRepository interface {
 	FindByID(ctx context.Context, id uint) (*Team, error)
 	AddMember(ctx context.Context, teamID, userID uint) error
 	ListMembers(ctx context.Context, teamID uint, page, pageSize int) ([]MemberWithUser, int64, error)
+	ListRanking(ctx context.Context, teamID uint, page, pageSize int) ([]MemberWithUser, int64, error)
 }
 
 // UserRepository checks user existence.
@@ -89,6 +90,60 @@ type MembersPage struct {
 	Page     int
 	PageSize int
 	Total    int64
+}
+
+// RankingInput holds the input for the GetRanking method.
+type RankingInput struct {
+	TeamID   uint
+	Page     int
+	PageSize int
+}
+
+// RankingEntry is a single entry in the ranking with an explicit rank position.
+type RankingEntry struct {
+	Rank   int
+	UserID uint
+	Name   string
+	Email  string
+	Score  int
+}
+
+// RankingPage is the paginated result of GetRanking.
+type RankingPage struct {
+	Data     []RankingEntry
+	Page     int
+	PageSize int
+	Total    int64
+}
+
+// GetRanking returns a paginated list of team members ordered by score descending.
+func (s *Service) GetRanking(ctx context.Context, input RankingInput) (*RankingPage, error) {
+	if _, err := s.repo.FindByID(ctx, input.TeamID); err != nil {
+		return nil, fmt.Errorf("teams.service.GetRanking: %w", err)
+	}
+
+	members, total, err := s.repo.ListRanking(ctx, input.TeamID, input.Page, input.PageSize)
+	if err != nil {
+		return nil, fmt.Errorf("teams.service.GetRanking: %w", err)
+	}
+
+	data := make([]RankingEntry, len(members))
+	for i, m := range members {
+		data[i] = RankingEntry{
+			Rank:   (input.Page-1)*input.PageSize + i + 1,
+			UserID: m.UserID,
+			Name:   m.Name,
+			Email:  m.Email,
+			Score:  m.Score,
+		}
+	}
+
+	return &RankingPage{
+		Data:     data,
+		Page:     input.Page,
+		PageSize: input.PageSize,
+		Total:    total,
+	}, nil
 }
 
 // ListMembers returns a paginated list of members for a team.

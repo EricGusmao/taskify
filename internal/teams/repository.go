@@ -16,6 +16,7 @@ type Repository interface {
 	FindByID(ctx context.Context, id uint) (*Team, error)
 	AddMember(ctx context.Context, teamID, userID uint) error
 	ListMembers(ctx context.Context, teamID uint, page, pageSize int) ([]MemberWithUser, int64, error)
+	ListRanking(ctx context.Context, teamID uint, page, pageSize int) ([]MemberWithUser, int64, error)
 }
 
 type gormRepository struct {
@@ -86,6 +87,35 @@ func (r *gormRepository) ListMembers(ctx context.Context, teamID uint, page, pag
 		LIMIT ? OFFSET ?`
 	if err := r.db.WithContext(ctx).Raw(listSQL, teamID, pageSize, offset).Scan(&results).Error; err != nil {
 		return nil, 0, fmt.Errorf("teams.repository.ListMembers: list: %w", err)
+	}
+
+	return results, count, nil
+}
+
+// ListRanking returns a paginated list of team members ordered by score descending.
+// Ties are broken by user ID ascending for deterministic ordering.
+func (r *gormRepository) ListRanking(ctx context.Context, teamID uint, page, pageSize int) ([]MemberWithUser, int64, error) {
+	var count int64
+	countSQL := `
+		SELECT COUNT(*)
+		FROM members m
+		JOIN users u ON u.id = m.user_id AND u.deleted_at IS NULL
+		WHERE m.team_id = ?`
+	if err := r.db.WithContext(ctx).Raw(countSQL, teamID).Scan(&count).Error; err != nil {
+		return nil, 0, fmt.Errorf("teams.repository.ListRanking: count: %w", err)
+	}
+
+	results := make([]MemberWithUser, 0)
+	offset := (page - 1) * pageSize
+	listSQL := `
+		SELECT m.user_id, u.name, u.email, u.score
+		FROM members m
+		JOIN users u ON u.id = m.user_id AND u.deleted_at IS NULL
+		WHERE m.team_id = ?
+		ORDER BY u.score DESC, u.id ASC
+		LIMIT ? OFFSET ?`
+	if err := r.db.WithContext(ctx).Raw(listSQL, teamID, pageSize, offset).Scan(&results).Error; err != nil {
+		return nil, 0, fmt.Errorf("teams.repository.ListRanking: %w", err)
 	}
 
 	return results, count, nil

@@ -82,6 +82,72 @@ type ListMembersResponse struct {
 	Total    int64            `json:"total"`
 }
 
+// RankingEntryResponse is a single entry in the ranking response.
+type RankingEntryResponse struct {
+	Rank   int    `json:"rank"`
+	UserID uint   `json:"user_id"`
+	Name   string `json:"name"`
+	Email  string `json:"email"`
+	Score  int    `json:"score"`
+}
+
+// RankingResponse is the paginated response for GET /teams/:id/ranking.
+type RankingResponse struct {
+	Data     []RankingEntryResponse `json:"data"`
+	Page     int                    `json:"page"`
+	PageSize int                    `json:"page_size"`
+	Total    int64                  `json:"total"`
+}
+
+// GetRanking handles GET /teams/:id/ranking.
+func (h *Handler) GetRanking(c *echo.Context) error {
+	rawID := c.Param("id")
+	teamID, err := strconv.ParseUint(rawID, 10, 64)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid team id")
+	}
+
+	page := 1
+	if v, err := strconv.Atoi(c.QueryParam("page")); err == nil && v >= 1 {
+		page = v
+	}
+
+	pageSize := 20
+	if v, err := strconv.Atoi(c.QueryParam("page_size")); err == nil && v >= 1 && v <= 100 {
+		pageSize = v
+	}
+
+	result, err := h.svc.GetRanking(c.Request().Context(), RankingInput{
+		TeamID:   uint(teamID),
+		Page:     page,
+		PageSize: pageSize,
+	})
+	if err != nil {
+		if errors.Is(err, ErrTeamNotFound) {
+			return echo.NewHTTPError(http.StatusNotFound, "team not found")
+		}
+		return err
+	}
+
+	data := make([]RankingEntryResponse, len(result.Data))
+	for i, e := range result.Data {
+		data[i] = RankingEntryResponse{
+			Rank:   e.Rank,
+			UserID: e.UserID,
+			Name:   e.Name,
+			Email:  e.Email,
+			Score:  e.Score,
+		}
+	}
+
+	return c.JSON(http.StatusOK, RankingResponse{
+		Data:     data,
+		Page:     result.Page,
+		PageSize: result.PageSize,
+		Total:    result.Total,
+	})
+}
+
 // ListMembers handles GET /teams/:id/members.
 func (h *Handler) ListMembers(c *echo.Context) error {
 	rawID := c.Param("id")
