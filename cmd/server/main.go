@@ -11,9 +11,11 @@ import (
 
 	"github.com/EricGusmao/taskify/internal/auth"
 	"github.com/EricGusmao/taskify/internal/infra"
+	"github.com/EricGusmao/taskify/internal/middleware"
+	"github.com/EricGusmao/taskify/internal/teams"
 	"github.com/EricGusmao/taskify/internal/validate"
 	"github.com/labstack/echo/v5"
-	"github.com/labstack/echo/v5/middleware"
+	echomw "github.com/labstack/echo/v5/middleware"
 	"go.uber.org/zap"
 	"go.uber.org/zap/exp/zapslog"
 )
@@ -54,11 +56,11 @@ func run(ctx context.Context, getenv func(string) string) error {
 	})
 
 	e.Use(
-		middleware.Recover(),
-		middleware.RequestLogger(),
-		middleware.SecureWithConfig(
-			middleware.SecureConfig{
-				Skipper:               middleware.DefaultSkipper,
+		echomw.Recover(),
+		echomw.RequestLogger(),
+		echomw.SecureWithConfig(
+			echomw.SecureConfig{
+				Skipper:               echomw.DefaultSkipper,
 				XSSProtection:         "0",
 				ContentSecurityPolicy: "default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; sandbox;",
 				ContentTypeNosniff:    "nosniff",
@@ -72,6 +74,13 @@ func run(ctx context.Context, getenv func(string) string) error {
 	authSvc := auth.NewService(authRepo, logger, []byte(jwtSecret))
 	authHandler := auth.NewHandler(authSvc)
 	auth.RegisterRoutes(e.Group("/auth"), authHandler)
+
+	teamsRepo := teams.NewRepository(db)
+	teamsSvc := teams.NewService(teamsRepo, logger)
+	teamsHandler := teams.NewHandler(teamsSvc)
+	teamsGroup := e.Group("/teams")
+	teamsGroup.Use(middleware.JWTAuth([]byte(jwtSecret)))
+	teams.RegisterRoutes(teamsGroup, teamsHandler)
 
 	sc := echo.StartConfig{
 		Address:         ":" + getenv("PORT"),

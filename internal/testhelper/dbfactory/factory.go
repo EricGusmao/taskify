@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/EricGusmao/taskify/internal/auth"
+	"github.com/EricGusmao/taskify/internal/teams"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
@@ -60,9 +61,35 @@ func User(ctx context.Context, t *testing.T, tx *gorm.DB, opts *UserOpts) *auth.
 		Score:        opts.Score,
 	}
 
-	if err := tx.WithContext(ctx).Create(u).Error; err != nil {
+	if err := gorm.G[auth.User](tx).Create(ctx, u); err != nil {
 		t.Fatalf("dbfactory.User: %v", err)
 	}
 
 	return u
+}
+
+// TeamOpts configures the Team factory.
+type TeamOpts struct {
+	Name string
+}
+
+// Team inserts a teams.Team into the database and returns it.
+func Team(ctx context.Context, t *testing.T, tx *gorm.DB, opts *TeamOpts) *teams.Team {
+	t.Helper()
+
+	if opts == nil {
+		opts = &TeamOpts{}
+	}
+
+	name := opts.Name
+	if name == "" {
+		name = fmt.Sprintf("Team %s", seqStr())
+	}
+
+	team := &teams.Team{Name: name}
+	if err := gorm.G[teams.Team](tx).Create(ctx, team); err != nil {
+		t.Fatalf("dbfactory.Team: %v", err)
+	}
+
+	return team
 }

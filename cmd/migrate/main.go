@@ -8,6 +8,7 @@ import (
 
 	"github.com/EricGusmao/taskify/internal/auth"
 	"github.com/EricGusmao/taskify/internal/infra"
+	"github.com/EricGusmao/taskify/internal/teams"
 )
 
 func main() {
@@ -23,7 +24,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := db.AutoMigrate(&auth.User{}); err != nil {
+	if err := db.AutoMigrate(&auth.User{}, &teams.Team{}); err != nil {
 		fmt.Fprintf(os.Stderr, "migrate: auto migrate: %v\n", err)
 		os.Exit(1)
 	}
