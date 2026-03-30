@@ -47,6 +47,21 @@ A imagem de produção usa `gcr.io/distroless/static-debian13:nonroot` como base
 ## O Que Faria Diferente com Mais Tempo
 
 
+### Erros de Validação como Array Descritivo
+
+A implementação atual retorna o primeiro erro de validação encontrado como uma string simples (ex: `"field 'email' is required"`). Com mais tempo, o handler mapearia os erros do `go-playground/validator` para um array estruturado:
+
+```json
+{
+  "errors": [
+    { "field": "email", "message": "email is required" },
+    { "field": "password", "message": "password must be at least 8 characters" }
+  ]
+}
+```
+
+Isso é mais útil para clientes — especialmente UIs de formulário — que precisam exibir múltiplos erros simultaneamente, um por campo. A iteração sobre `validator.ValidationErrors` já fornece todos os erros de uma vez; o que falta é serializar essa lista em vez de retornar apenas o primeiro item.
+
 ### Paginação por Cursor
 
 A paginação atual usa offset/limit, que tem comportamento inconsistente quando registros são inseridos ou deletados entre páginas. Para listas ordenadas por score (ranking), paginação por cursor seria mais correta: `after_score` + `after_id` como parâmetros garantem resultados estáveis.
